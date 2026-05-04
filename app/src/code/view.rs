@@ -8,8 +8,8 @@ use crate::editor::InteractionState;
 use crate::input::Vector2F;
 use crate::pane_group::focus_state::PaneFocusHandle;
 use crate::pane_group::pane::view::header::components::{
-    render_pane_header_buttons, render_pane_header_title_text, render_three_column_header,
-    CenteredHeaderEdgeWidth,
+    CenteredHeaderEdgeWidth, render_pane_header_buttons, render_pane_header_title_text,
+    render_three_column_header,
 };
 use crate::pane_group::pane::view::header::render_pane_header_draggable;
 use crate::pane_group::{CodePane, PaneConfigurationEvent, PaneDragDropLocation};
@@ -19,8 +19,8 @@ use crate::terminal::cli_agent::{
     build_selection_line_range_prompt, build_selection_substring_prompt,
 };
 use crate::terminal::view::CliAgentRouting;
-use crate::workspace::util::get_context_target_terminal_view;
 use crate::workspace::TabBarDropTargetData;
+use crate::workspace::util::get_context_target_terminal_view;
 use crate::{code::EditorTabBarDropTargetData, pane_group::pane::ActionOrigin};
 use lsp::LspManagerModel;
 use pathfinder_color::ColorU;
@@ -42,6 +42,8 @@ use warpui::text_layout::ClipConfig;
 #[cfg(feature = "local_fs")]
 use warpui::clipboard::ClipboardContent;
 use warpui::{
+    AppContext, Element, Entity, ModelHandle, SingletonEntity, TypedActionView, View, ViewContext,
+    ViewHandle, WindowId,
     elements::{
         AcceptedByDropTarget, Align, Border, ChildAnchor, ChildView, Clipped, ConstrainedBox,
         Container, CornerRadius, CrossAxisAlignment, Draggable, DraggableState, DropTarget, Empty,
@@ -53,14 +55,12 @@ use warpui::{
     id,
     keymap::EditableBinding,
     ui_components::{button::ButtonVariant, components::UiComponent},
-    AppContext, Element, Entity, ModelHandle, SingletonEntity, TypedActionView, View, ViewContext,
-    ViewHandle, WindowId,
 };
 
 use crate::{
     menu::{MenuItem, MenuItemFields},
-    notebooks::file::{is_markdown_file, MarkdownDisplayMode},
-    search::{files::icon::icon_from_file_path, ItemHighlightState},
+    notebooks::file::{MarkdownDisplayMode, is_markdown_file},
+    search::{ItemHighlightState, files::icon::icon_from_file_path},
     tab::TAB_BAR_BORDER_HEIGHT,
     ui_components::{blended_colors, buttons::icon_button},
     view_components::{DismissibleToast, MarkdownToggleEvent, MarkdownToggleView},
@@ -68,8 +68,8 @@ use crate::{
 };
 
 use crate::pane_group::{
-    pane::{view, PaneHeaderAction},
     BackingView, PaneConfiguration, PaneEvent,
+    pane::{PaneHeaderAction, view},
 };
 
 use super::{
@@ -79,10 +79,23 @@ use super::{
     local_code_editor::{LocalCodeEditorEvent, LocalCodeEditorView},
 };
 
-use crate::{send_telemetry_from_ctx, TelemetryEvent};
+use crate::{TelemetryEvent, send_telemetry_from_ctx};
 
 type SaveCallback =
     Box<dyn FnOnce(SaveOutcome, &mut CodeView, &mut ViewContext<CodeView>) + Send + Sync + 'static>;
+
+fn raw_editor_soft_wrap_for_path(path: &Path) -> bool {
+    is_markdown_file(path)
+}
+
+fn raw_editor_render_options_for_path(path: &Path) -> CodeEditorRenderOptions {
+    CodeEditorRenderOptions::new(VerticalExpansionBehavior::FillMaxHeight)
+        .soft_wrap(raw_editor_soft_wrap_for_path(path))
+}
+
+fn raw_editor_show_line_numbers_for_path(path: &Path) -> bool {
+    !raw_editor_soft_wrap_for_path(path)
+}
 
 const CLOSE_BUTTON_WIDTH: f32 = 24.;
 const LANGUAGE_ICON_WIDTH: f32 = 16.;
@@ -371,13 +384,16 @@ impl CodeView {
                 path,
                 |buffer_state, ctx| {
                     ctx.add_typed_action_view(|ctx| {
-                        CodeEditorView::new(
+                        let mut editor = CodeEditorView::new(
                             None,
                             Some(buffer_state.buffer),
-                            CodeEditorRenderOptions::new(VerticalExpansionBehavior::FillMaxHeight),
+                            raw_editor_render_options_for_path(path),
                             ctx,
-                        )
-                        .with_horizontal_scrollbar_appearance(
+                        );
+                        if !raw_editor_show_line_numbers_for_path(path) {
+                            editor = editor.with_show_line_numbers(false);
+                        }
+                        editor.with_horizontal_scrollbar_appearance(
                             warpui::elements::new_scrollable::ScrollableAppearance::new(
                                 warpui::elements::ScrollbarWidth::Auto,
                                 true,
@@ -2275,4 +2291,30 @@ fn render_unsaved_changes_icon(color: ColorU) -> Box<dyn Element> {
     .with_width(8.)
     .with_height(8.)
     .finish()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use super::{
+        raw_editor_render_options_for_path, raw_editor_show_line_numbers_for_path,
+        raw_editor_soft_wrap_for_path,
+    };
+
+    #[test]
+    fn raw_markdown_editor_paths_enable_soft_wrap() {
+        assert!(raw_editor_soft_wrap_for_path(Path::new("README.md")));
+        assert!(raw_editor_render_options_for_path(Path::new("README.md")).soft_wrap_enabled());
+        assert!(!raw_editor_show_line_numbers_for_path(Path::new(
+            "README.md"
+        )));
+    }
+
+    #[test]
+    fn non_markdown_editor_paths_keep_infinite_width() {
+        assert!(!raw_editor_soft_wrap_for_path(Path::new("main.rs")));
+        assert!(!raw_editor_render_options_for_path(Path::new("main.rs")).soft_wrap_enabled());
+        assert!(raw_editor_show_line_numbers_for_path(Path::new("main.rs")));
+    }
 }

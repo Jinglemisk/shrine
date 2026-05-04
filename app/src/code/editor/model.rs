@@ -19,7 +19,7 @@ use warp_editor::content::edit::EditDelta;
 use warp_editor::content::find::{SearchConfig, SearchResults};
 use warp_editor::content::selection_model::BufferSelectionModel;
 use warp_editor::content::version::BufferVersion;
-use warp_editor::multiline::{AnyMultilineString, MultilineString, LF};
+use warp_editor::multiline::{AnyMultilineString, LF, MultilineString};
 use warp_editor::render::model::{AutoScrollMode, LineCount, StyleUpdateAction};
 use warp_editor::selection::TextDirection;
 use warpui::units::{IntoPixels, Pixels};
@@ -32,11 +32,11 @@ use crate::{
 
 use ai::diff_validation::DiffDelta;
 use itertools::Itertools;
-use languages::{language_by_filename, language_by_name, Language};
+use languages::{Language, language_by_filename, language_by_name};
 use line_ending::LineEnding;
 use string_offset::CharOffset;
 use syntax_tree::{ColorMap, DecorationStateEvent, SyntaxTreeState};
-use vec1::{vec1, Vec1};
+use vec1::{Vec1, vec1};
 use vim::vim::{
     BracketChar, CharacterMotion, Direction, FindCharMotion, FirstNonWhitespaceMotion,
     InsertPosition, LineMotion, MotionType, TextObjectInclusion, TextObjectType, VimOperator,
@@ -71,13 +71,13 @@ use warpui::elements::{
     AnchorPair, OffsetPositioning, OffsetType, PositionedElementOffsetBounds, PositioningAxis,
     XAxisAnchor, YAxisAnchor,
 };
-use warpui::text::{point::Point, TextBuffer};
+use warpui::text::{TextBuffer, point::Point};
 use warpui::{AppContext, Entity, ModelContext, ModelHandle, SingletonEntity};
 
 use super::super::DiffResult;
 use super::comments::{EditorCommentsModel, PendingComment, PendingCommentEvent};
 use super::diff::{
-    add_inline_overlay_color, DiffModel, DiffModelEvent, DiffStatus, RenderableDiffHunk,
+    DiffModel, DiffModelEvent, DiffStatus, RenderableDiffHunk, add_inline_overlay_color,
 };
 use super::line::EditorLineLocation;
 use crate::code_review::comments::{CommentId, CommentOrigin, LineDiffContent};
@@ -323,6 +323,7 @@ impl CodeEditorModel {
         text_styles: RichTextStyles,
         session_platform: Option<SessionPlatform>,
         lazy_layout: bool,
+        soft_wrap: bool,
         buffer: Option<ModelHandle<Buffer>>, // Whether the editor is using an underlying shared buffer.
         ctx: &mut ModelContext<Self>,
     ) -> Self {
@@ -361,9 +362,14 @@ impl CodeEditorModel {
         let hidden_lines =
             ctx.add_model(|_| HiddenLinesModel::new(content.clone(), selection_model.clone()));
 
+        let width_setting = if soft_wrap {
+            WidthSetting::FitViewport
+        } else {
+            WidthSetting::InfiniteWidth
+        };
         let render_state = ctx.add_model(|ctx| {
             RenderState::new(text_styles, lazy_layout, Some(hidden_lines.clone()), ctx)
-                .with_width_setting(WidthSetting::InfiniteWidth)
+                .with_width_setting(width_setting)
         });
         ctx.subscribe_to_model(&render_state, |me, event, ctx| {
             me.handle_render_state_model_event(event, ctx);
@@ -452,7 +458,33 @@ impl CodeEditorModel {
             RenderEvent::LayoutUpdated => {
                 ctx.emit(CodeEditorModelEvent::LayoutInvalidated);
             }
-            RenderEvent::NeedsResize => {}
+            RenderEvent::NeedsResize => {
+                if !self
+                    .render_state
+                    .as_ref(ctx)
+                    .container_scrolls_horizontally()
+                {
+                    self.rebuild_render_layout(ctx);
+                }
+            }
+        }
+    }
+
+    fn rebuild_render_layout(&mut self, ctx: &mut ModelContext<Self>) {
+        let content = self.content.as_ref(ctx);
+        let delta = content.invalidate_layout();
+        let buffer_version = content.buffer_version();
+
+        if let Some(delay_rendering) = &mut self.delay_rendering {
+            delay_rendering.edits.push((delta, buffer_version));
+        } else {
+            self.render_state.update(ctx, move |render_state, _| {
+                render_state.add_pending_edit(delta, buffer_version);
+            });
+
+            if self.diff_nav_is_active() {
+                self.refresh_diff_state(ctx);
+            }
         }
     }
 
