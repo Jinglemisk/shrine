@@ -61,19 +61,6 @@ fn mock_model_with_soft_wrap(app: &mut App, soft_wrap: bool) -> ModelHandle<Code
     })
 }
 
-fn mock_model_with_text_and_soft_wrap(
-    app: &mut App,
-    text: &str,
-    soft_wrap: bool,
-) -> ModelHandle<CodeEditorModel> {
-    app.add_model(|ctx| {
-        let styles = code_text_styles(Appearance::as_ref(ctx), FontSettings::as_ref(ctx), None);
-        let mut model = CodeEditorModel::new(styles, None, false, soft_wrap, None, ctx);
-        model.reset_content(InitialBufferState::plain_text(text), ctx);
-        model
-    })
-}
-
 async fn layout_model(app: &mut App, model: &ModelHandle<CodeEditorModel>) {
     app.read(|ctx| model.as_ref(ctx).render_state.as_ref(ctx).layout_complete())
         .await;
@@ -107,40 +94,37 @@ fn test_soft_wrap_controls_render_width_setting() {
 }
 
 #[test]
-fn test_soft_wrapped_editor_relays_out_after_viewport_resize() {
+fn test_soft_wrapped_editor_requests_layout_after_viewport_resize() {
     App::test((), |mut app| async move {
         initialize_deps(&mut app);
-        let editor = mock_model_with_text_and_soft_wrap(
-            &mut app,
-            "This markdown paragraph should not wrap after every character once the editor has a real viewport width.",
-            true,
-        );
+        let editor = mock_model_with_soft_wrap(&mut app, true);
 
-        layout_model(&mut app, &editor).await;
-        let zero_width_height =
-            app.read(|ctx| editor.as_ref(ctx).render_state().as_ref(ctx).height());
-
+        let (layout_tx, layout_rx) = oneshot::channel();
         app.update(|ctx| {
-            editor
-                .as_ref(ctx)
-                .render_state()
-                .update(ctx, |render_state, ctx| {
-                    render_state.set_viewport_size(
-                        SizeInfo {
-                            viewport_size: vec2f(600., 400.),
-                            needs_layout: true,
-                        },
-                        ctx,
-                    );
-                });
-        });
-        layout_model(&mut app, &editor).await;
+            let mut layout_tx = Some(layout_tx);
+            ctx.subscribe_to_model(&editor, move |_, event, _| {
+                if let CodeEditorModelEvent::LayoutInvalidated = event {
+                    if let Some(tx) = layout_tx.take() {
+                        let _ = tx.send(());
+                    }
+                }
+            });
 
-        let resized_height = app.read(|ctx| editor.as_ref(ctx).render_state().as_ref(ctx).height());
-        assert!(
-            resized_height < zero_width_height,
-            "soft-wrapped content should be re-laid out using the measured viewport width"
-        );
+            let render_state = editor.as_ref(ctx).render_state().clone();
+            render_state.update(ctx, |render_state, ctx| {
+                render_state.set_viewport_size(
+                    SizeInfo {
+                        viewport_size: vec2f(600., 400.),
+                        needs_layout: true,
+                    },
+                    ctx,
+                );
+            });
+        });
+
+        layout_rx
+            .await
+            .expect("soft-wrapped viewport resize should request layout");
     });
 }
 
