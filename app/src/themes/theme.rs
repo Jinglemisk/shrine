@@ -49,9 +49,11 @@ pub enum ThemeKind {
     ReceivedReferralReward,
     #[schemars(description = "Adeberry")]
     Adeberry,
+    #[default]
+    #[schemars(description = "Shrine")]
+    Shrine,
     #[schemars(description = "Phenomenon")]
     Phenomenon,
-    #[default]
     #[schemars(description = "Dark")]
     Dark,
     #[schemars(description = "Dracula")]
@@ -133,6 +135,7 @@ impl std::fmt::Display for ThemeKind {
             ThemeKind::Phenomenon => "Phenomenon",
             ThemeKind::SolarFlare => "Solar Flare",
             ThemeKind::Adeberry => "Adeberry",
+            ThemeKind::Shrine => "Shrine",
             ThemeKind::SentReferralReward => "Warp Referral",
             ThemeKind::ReceivedReferralReward => "Referred to Warp",
             ThemeKind::Custom(custom_theme) => custom_theme.name.as_str(),
@@ -321,6 +324,7 @@ impl WarpThemeConfig {
             (ThemeKind::Phenomenon, phenomenon()),
             (ThemeKind::SolarFlare, solar_flare()),
             (ThemeKind::Adeberry, adeberry()),
+            (ThemeKind::Shrine, shrine()),
         ]);
         WarpThemeConfig { theme_map }
     }

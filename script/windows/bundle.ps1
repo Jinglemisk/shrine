@@ -112,14 +112,20 @@ if ("$CHANNEL" -eq 'local') {
 } elseif ("$CHANNEL" -eq 'oss') {
     $WARP_BIN = 'warp-oss'
     $BINARY_NAME = 'warp-oss.exe'
-    $APP_NAME = 'WarpOss'
+    $APP_NAME = 'Shrine'
     # The OSS channel does not ship Sentry, so drop the crash_reporting feature
     # (which would otherwise pull in the Sentry SDK as a dependency).
     $FEATURES = 'release_bundle,gui,nld_improvements'
 }
 
 $BINARY_PATH = "$CARGO_TARGET_OUTPUT_DIR\$BINARY_NAME"
-$BUNDLE_ID = "dev.warp.$APP_NAME"
+if ("$CHANNEL" -eq 'oss') {
+    $BUNDLE_ID = 'dev.shrine.Shrine'
+    $URL_SCHEME = 'shrine'
+} else {
+    $BUNDLE_ID = "dev.warp.$APP_NAME"
+    $URL_SCHEME = $APP_NAME
+}
 $INSTALLER_OUTPUT_DIR = "$WINDOWS_INSTALLER_DIR\Output"
 $INSTALLER_NAME = "$($APP_NAME)$($FILE_ENDING)"
 $INSTALLER_PATH = "$($INSTALLER_OUTPUT_DIR)\$($INSTALLER_NAME).exe"
@@ -194,6 +200,8 @@ $ISCC_ARGS = @(
     "/DTargetProfileDir=$CARGO_TARGET_OUTPUT_DIR",
     "/DMyAppName=$APP_NAME",
     "/DMyAppVersion=$env:GIT_RELEASE_TAG",
+    "/DBundleId=$BUNDLE_ID",
+    "/DUrlScheme=$URL_SCHEME",
     "/DArch=$ARCH",
     "/DOutputName=$INSTALLER_NAME"
 )

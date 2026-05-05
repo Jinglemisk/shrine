@@ -25,9 +25,10 @@ if [ "$WARP_CHANNEL" = "local" ]; then
     WARP_APP_PATH="target/debug/bundle/osx/WarpLocal.app"
     WARP_SCHEME_NAME="warplocal"
 else
-    WARP_APP_PATH="target/debug/bundle/osx/WarpOss.app"
-    WARP_SCHEME_NAME="warposs"
+    WARP_APP_PATH="target/debug/bundle/osx/Shrine.app"
+    WARP_SCHEME_NAME="shrine"
 fi
+CARGO_OUTPUT_DIR="target/debug"
 DONT_OPEN=false
 # Launches the binary with "open", meaning the Warp process is
 # launched by the MacOS application launcher instead of a shell session.
@@ -59,10 +60,11 @@ while (( "$#" )); do
       ;;
     --release)
       echo "Detected release build, pointing at release bundle under target/release/bundle"
+      CARGO_OUTPUT_DIR="target/release"
       if [ "$WARP_CHANNEL" = "local" ]; then
           WARP_APP_PATH="target/release/bundle/osx/WarpLocal.app"
       else
-          WARP_APP_PATH="target/release/bundle/osx/WarpOss.app"
+          WARP_APP_PATH="target/release/bundle/osx/Shrine.app"
       fi
       PARAMS="$PARAMS $1"
       shift
@@ -70,10 +72,11 @@ while (( "$#" )); do
     --profile)
       PROFILE="$2"
       shift 2
+      CARGO_OUTPUT_DIR="target/${PROFILE}"
       if [ "$WARP_CHANNEL" = "local" ]; then
           WARP_APP_PATH="target/${PROFILE}/bundle/osx/WarpLocal.app"
       else
-          WARP_APP_PATH="target/${PROFILE}/bundle/osx/WarpOss.app"
+          WARP_APP_PATH="target/${PROFILE}/bundle/osx/Shrine.app"
       fi
       PARAMS="$PARAMS --profile $PROFILE"
       ;;
@@ -94,11 +97,72 @@ done
 
 rm -rf "$WARP_APP_PATH"
 
-pushd app > /dev/null
 echo "Bundling app (bin: $WARP_BIN_NAME)..."
-cargo bundle --bin "$WARP_BIN_NAME" --features "$FEATURES" $PARAMS
+if cargo bundle --help > /dev/null 2>&1; then
+  pushd app > /dev/null
+  cargo bundle --bin "$WARP_BIN_NAME" --features "$FEATURES" $PARAMS
+  popd > /dev/null
+else
+  echo "cargo-bundle not installed; assembling a dev app bundle from cargo build output..."
+  cargo build -p warp --bin "$WARP_BIN_NAME" --features "$FEATURES" $PARAMS
+
+  if [ "$WARP_CHANNEL" = "local" ]; then
+    WARP_APP_NAME="WarpLocal"
+    BUNDLE_ID="dev.warp.WarpLocal"
+  else
+    WARP_APP_NAME="Shrine"
+    BUNDLE_ID="dev.shrine.Shrine"
+  fi
+
+  mkdir -p "$WARP_APP_PATH/Contents/MacOS" "$WARP_APP_PATH/Contents/Resources"
+  cp "$CARGO_OUTPUT_DIR/$WARP_BIN_NAME" "$WARP_APP_PATH/Contents/MacOS/$WARP_BIN_NAME"
+  chmod +x "$WARP_APP_PATH/Contents/MacOS/$WARP_BIN_NAME"
+
+  ICON_SOURCE="app/channels/$WARP_CHANNEL/icon/no-padding/512x512.png"
+  if [ -f "$ICON_SOURCE" ]; then
+    sips -s format icns "$ICON_SOURCE" --out "$WARP_APP_PATH/Contents/Resources/$WARP_APP_NAME.icns" > /dev/null
+    WARP_ICON_FILE="$WARP_APP_NAME"
+  else
+    WARP_ICON_FILE=""
+  fi
+
+  cat > "$WARP_APP_PATH/Contents/Info.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleDevelopmentRegion</key>
+  <string>English</string>
+  <key>CFBundleDisplayName</key>
+  <string>$WARP_APP_NAME</string>
+  <key>CFBundleExecutable</key>
+  <string>$WARP_BIN_NAME</string>
+  <key>CFBundleIconFile</key>
+  <string>$WARP_ICON_FILE</string>
+  <key>CFBundleIdentifier</key>
+  <string>$BUNDLE_ID</string>
+  <key>CFBundleInfoDictionaryVersion</key>
+  <string>6.0</string>
+  <key>CFBundleName</key>
+  <string>$WARP_APP_NAME</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>CFBundleShortVersionString</key>
+  <string>0.1.0</string>
+  <key>CFBundleVersion</key>
+  <string>0.1.0</string>
+  <key>LSMinimumSystemVersion</key>
+  <string>10.15</string>
+  <key>NSHighResolutionCapable</key>
+  <true/>
+  <key>NSSupportsAutomaticGraphicsSwitching</key>
+  <true/>
+</dict>
+</plist>
+PLIST
+fi
 echo "Successfully bundled..."
-popd > /dev/null
 
 if [[ ",$FEATURES," =~ ",cocoa_sentry," ]]; then
   echo "Copying Sentry framework into app bundle..."

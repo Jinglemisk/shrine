@@ -1,10 +1,10 @@
 use asset_macro::bundled_or_fetched_asset;
 use pathfinder_color::ColorU;
 use warp_core::ui::{
-    color::{blend::Blend, coloru_with_opacity, OPAQUE},
+    color::{OPAQUE, blend::Blend, coloru_with_opacity},
     theme::{
-        color::CustomDetails, AnsiColor, AnsiColors, Details, Fill, HorizontalGradient, Image,
-        TerminalColors, VerticalGradient, WarpTheme,
+        AnsiColor, AnsiColors, Details, Fill, HorizontalGradient, Image, TerminalColors,
+        VerticalGradient, WarpTheme, color::CustomDetails,
     },
 };
 
@@ -218,6 +218,27 @@ const ADEBERRY_BRIGHT_COLORS: AnsiColors = AnsiColors::new(
     AnsiColor::from_u32(0xFFFFFFFF),
 );
 
+const SHRINE_NORMAL_COLORS: AnsiColors = AnsiColors::new(
+    AnsiColor::from_u32(0x121416FF),
+    AnsiColor::from_u32(0xD0021BFF),
+    AnsiColor::from_u32(0x7A8F7AFF),
+    AnsiColor::from_u32(0xC9A85DFF),
+    AnsiColor::from_u32(0x2B3945FF),
+    AnsiColor::from_u32(0x8A1F2DFF),
+    AnsiColor::from_u32(0xA8B4B8FF),
+    AnsiColor::from_u32(0xEDE8DCFF),
+);
+const SHRINE_BRIGHT_COLORS: AnsiColors = AnsiColors::new(
+    AnsiColor::from_u32(0x3A3E42FF),
+    AnsiColor::from_u32(0xFF1F36FF),
+    AnsiColor::from_u32(0xA5B99AFF),
+    AnsiColor::from_u32(0xE1C06EFF),
+    AnsiColor::from_u32(0x506171FF),
+    AnsiColor::from_u32(0xC43646FF),
+    AnsiColor::from_u32(0xCCD5D6FF),
+    AnsiColor::from_u32(0xFFFFFFFF),
+);
+
 pub(super) fn light_mode_colors() -> TerminalColors {
     TerminalColors::new(LIGHT_MODE_NORMAL_COLORS, LIGHT_MODE_BRIGHT_COLORS)
 }
@@ -256,6 +277,10 @@ pub(super) fn solarflare_colors() -> TerminalColors {
 
 pub(super) fn adeberry_colors() -> TerminalColors {
     TerminalColors::new(ADEBERRY_NORMAL_COLORS, ADEBERRY_BRIGHT_COLORS)
+}
+
+pub(super) fn shrine_colors() -> TerminalColors {
+    TerminalColors::new(SHRINE_NORMAL_COLORS, SHRINE_BRIGHT_COLORS)
 }
 
 /// Default bundled themes
@@ -611,6 +636,22 @@ pub(super) fn adeberry() -> WarpTheme {
         adeberry_colors(),
         None,
         Some("Adeberry".to_string()),
+    )
+}
+
+pub(super) fn shrine() -> WarpTheme {
+    WarpTheme::new(
+        Fill::VerticalGradient(VerticalGradient::new(
+            ColorU::from_u32(0x080A0CFF),
+            ColorU::from_u32(0x151012FF),
+        )),
+        ColorU::from_u32(0xF1EEE4FF),
+        Fill::Solid(ColorU::from_u32(0xD0021BFF)),
+        None,
+        Some(Details::Darker),
+        shrine_colors(),
+        None,
+        Some("Shrine".to_string()),
     )
 }
 
