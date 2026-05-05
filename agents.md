@@ -40,3 +40,19 @@ The known Shrine-specific editor text wrapping patch touches:
 - `app/src/code/view.rs`
 
 Expect upstream conflicts to be most likely around those files.
+
+## Local Dev Run
+
+Run the fork with an isolated local data profile:
+
+```bash
+WARP_DATA_PROFILE=shrine cargo run --features fast_dev
+```
+
+This keeps local Shrine data separate from the default `dev.warp.WarpOss` profile and enables `skip_login` for local development.
+
+If Rust incremental compilation hits a local artifact error, rerun with:
+
+```bash
+WARP_DATA_PROFILE=shrine CARGO_INCREMENTAL=0 cargo run --features fast_dev
+```
